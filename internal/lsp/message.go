@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// All structs here are derived from the LSP 3.17 specification:
+// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification
+
 type CodeLensParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 }
@@ -50,3 +53,37 @@ func URIToPath(uri string) string {
 func PathToURI(path string) string {
 	return "file://" + path
 }
+
+type DidSaveTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type DidChangeWatchedFilesParams struct {
+	Changes []FileEvent `json:"changes"`
+}
+
+type FileEvent struct {
+	URI  string         `json:"uri"`
+	Type FileChangeType `json:"type"`
+}
+
+type FileChangeType uint
+
+const (
+	FileChangeTypeCreated FileChangeType = iota + 1
+	FileChangedTypeChanged
+	FileChangedTypeDeleted
+)
+
+type FileSystemWatcher struct {
+	GlobPattern string    `json:"globPattern"`
+	Kind        WatchKind `json:"kind,omitempty"`
+}
+
+type WatchKind uint
+
+const (
+	WatchKindCreate WatchKind = 1
+	WatchKindChange WatchKind = 2
+	WatchKindDelete WatchKind = 4
+)

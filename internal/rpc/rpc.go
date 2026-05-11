@@ -6,6 +6,8 @@ import (
 	"strconv"
 )
 
+const Version = "2.0"
+
 // http://www.jsonrpc.org/specification#request_object
 type Request struct {
 	JSONRPC string           `json:"jsonrpc"`
@@ -20,6 +22,25 @@ type Response struct {
 	ID      any    `json:"id"`
 	Result  any    `json:"result,omitempty"`
 	Error   *Error `json:"error,omitempty"`
+}
+
+func SuccessResponse(id int, v any) *Response {
+	return &Response{
+		JSONRPC: Version,
+		ID:      id,
+		Result:  v,
+	}
+}
+
+func ErrorResponse(id int, code int, err error) *Response {
+	return &Response{
+		JSONRPC: Version,
+		ID:      id,
+		Error: &Error{
+			Code:    code,
+			Message: err.Error(),
+		},
+	}
 }
 
 // http://www.jsonrpc.org/specification#error_object
