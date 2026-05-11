@@ -68,7 +68,7 @@ func (srv *Server) Dispatch(s *Session) error {
 	return handler(s)
 }
 
-type Handler[T any, R any] func(*Session, *T) (R, error)
+type Handler[T any, R any] func(*Session, T) (R, error)
 type HandlerRegistry map[string]func(*Session) error
 
 func RegisterHandler[T any, R any](
@@ -83,7 +83,7 @@ func RegisterHandler[T any, R any](
 				return Respond(s.responseWriter, rpc.ErrorResponse(s.ID, rpc.CodeParseError, err))
 			}
 		}
-		v, err := fn(s, &param)
+		v, err := fn(s, param)
 		if err != nil {
 			// TODO: unwrap error to get a correct rpc error code
 			return Respond(s.responseWriter, rpc.ErrorResponse(s.ID, rpc.CodeInternalError, err))
@@ -93,7 +93,7 @@ func RegisterHandler[T any, R any](
 }
 
 type Session struct {
-	*rpc.Request
+	rpc.Request
 	responseWriter io.Writer
 }
 
@@ -106,5 +106,5 @@ func NewSession(r *bufio.Reader, w io.Writer) (*Session, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal jsonrpc2 request: %w", err)
 	}
-	return &Session{Request: &req, responseWriter: w}, nil
+	return &Session{Request: req, responseWriter: w}, nil
 }

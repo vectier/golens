@@ -24,16 +24,16 @@ type Response struct {
 	Error   *Error `json:"error,omitempty"`
 }
 
-func SuccessResponse(id int, v any) *Response {
-	return &Response{
+func SuccessResponse(id int, v any) Response {
+	return Response{
 		JSONRPC: Version,
 		ID:      id,
 		Result:  v,
 	}
 }
 
-func ErrorResponse(id int, code int, err error) *Response {
-	return &Response{
+func ErrorResponse(id int, code int, err error) Response {
+	return Response{
 		JSONRPC: Version,
 		ID:      id,
 		Error: &Error{
