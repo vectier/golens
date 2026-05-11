@@ -3,7 +3,7 @@ name: build
 on:
   push:
     tags:
-      - "v*.*.*"   
+      - "v*.*.*"
 
 jobs:
   build:
@@ -34,7 +34,7 @@ jobs:
         run: |
           BINARY_NAME="golens"
           [ "$GOOS" = "windows" ] && BINARY_NAME="${BINARY_NAME}.exe"
-          go build -ldflags="-s -w" -o ${BINARY_NAME} .
+          go build -ldflags="-s -w -X 'github.com/vectier/golens/internal/lsp.Version=${GITHUB_REF_NAME#v}'" -o ${BINARY_NAME} .
 
       - name: Packaging
         run: |
