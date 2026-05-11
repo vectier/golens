@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 
@@ -14,37 +15,34 @@ import (
 // Set this using ldflags at build time.
 var Version = "0.0.0-dev"
 
-type Server struct{}
-
-func NewServer() *Server {
-	return &Server{}
+type Server struct {
+	handlers    HandlerRegistry
+	initialized bool
 }
 
-func (s *Server) Handle(ctx context.Context, r *bufio.Reader, w io.Writer) {
+func NewServer() *Server {
+	srv := &Server{handlers: make(HandlerRegistry)}
+
+	RegisterHandler(srv, "initialize", srv.Initialize)
+	RegisterHandler(srv, "initialized", srv.Initialized)
+	RegisterHandler(srv, "textDocument/codeLens", srv.TextDocumentCodeLens)
+	RegisterHandler(srv, "shutdown", srv.Shutdown)
+	RegisterHandler(srv, "exit", srv.Exit)
+
+	return srv
+}
+
+func (srv *Server) Handle(ctx context.Context, r *bufio.Reader, w io.Writer) {
 	for {
-		body, err := Parse(r)
+		s, err := NewSession(r, w)
 		if err != nil {
-			log.Printf("malformed jsonrpc2 request: %s\n", err)
-			continue
-		}
-		var req rpc.Request
-		if err := json.Unmarshal(body, &req); err != nil {
-			log.Printf("failed to unmarshal jsonrpc2 request: %s\n", err)
+			log.Printf("failed to create a session: %s\n", err)
 			continue
 		}
 
-		switch req.Method {
-		case "initialize":
-			err = s.Intialize(w, req.ID)
-		case "textDocument/codeLens":
-			err = s.handleCodeLens(w, &req)
-		case "shutdown":
-			err = Respond(w, rpc.SuccessResponse(req.ID, nil))
-		case "exit":
-			return
-		}
-		if err != nil {
+		if err := srv.Dispatch(s); err != nil {
 			log.Printf("failed to process request: %s\n", err)
+			continue
 		}
 
 		select {
@@ -55,41 +53,58 @@ func (s *Server) Handle(ctx context.Context, r *bufio.Reader, w io.Writer) {
 	}
 }
 
-func (s *Server) handleCodeLens(w io.Writer, req *rpc.Request) error {
-	var params CodeLensParams
-	if err := json.Unmarshal(*req.Params, &params); err != nil {
-		return Respond(w, rpc.ErrorResponse(req.ID, rpc.CodeParseError, err))
+func (srv *Server) Dispatch(s *Session) error {
+	handler, ok := srv.handlers[s.Method]
+	if !ok {
+		return Respond(
+			s.responseWriter,
+			rpc.ErrorResponse(
+				s.ID,
+				rpc.CodeMethodNotFound,
+				fmt.Errorf("unknown method: %s", s.Method),
+			),
+		)
 	}
-
-	lenses, err := ListInterfaceLenses(params.TextDocument.URI)
-	if err != nil {
-		return Respond(w, rpc.ErrorResponse(req.ID, rpc.CodeInternalError, err))
-	}
-
-	return Respond(w, rpc.SuccessResponse(req.ID, lenses))
+	return handler(s)
 }
 
-func (s *Server) Intialize(w io.Writer, id int) error {
-	return Respond(w, rpc.Response{
-		JSONRPC: "2.0",
-		ID:      id,
-		// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initializeResult
-		Result: map[string]any{
-			"capabilities": map[string]any{
-				// Tell the client that the server provides code lens
-				"codeLensProvider": map[string]any{
-					"resolveProvider": false,
-				},
-				// Tell the client to notify the server when any .go file changes.
-				// This is to invalidate the CodeLens cache immediately.
-				"workspace": map[string]any{
-					"fileOperations": map[string]any{},
-				},
-			},
-			"serverInfo": map[string]any{
-				"name":    "golens",
-				"version": Version,
-			},
-		},
-	})
+type Handler[T any, R any] func(*Session, *T) (R, error)
+type HandlerRegistry map[string]func(*Session) error
+
+func RegisterHandler[T any, R any](
+	s *Server,
+	method string,
+	fn Handler[T, R],
+) {
+	s.handlers[method] = func(s *Session) error {
+		var param T
+		if s.Params != nil {
+			if err := json.Unmarshal(*s.Params, &param); err != nil {
+				return Respond(s.responseWriter, rpc.ErrorResponse(s.ID, rpc.CodeParseError, err))
+			}
+		}
+		v, err := fn(s, &param)
+		if err != nil {
+			// TODO: unwrap error to get a correct rpc error code
+			return Respond(s.responseWriter, rpc.ErrorResponse(s.ID, rpc.CodeInternalError, err))
+		}
+		return Respond(s.responseWriter, rpc.SuccessResponse(s.ID, v))
+	}
+}
+
+type Session struct {
+	*rpc.Request
+	responseWriter io.Writer
+}
+
+func NewSession(r *bufio.Reader, w io.Writer) (*Session, error) {
+	body, err := Parse(r)
+	if err != nil {
+		return nil, fmt.Errorf("malformed jsonrpc2 request: %w", err)
+	}
+	var req rpc.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal jsonrpc2 request: %w", err)
+	}
+	return &Session{Request: &req, responseWriter: w}, nil
 }
