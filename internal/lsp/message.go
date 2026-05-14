@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 )
@@ -17,8 +18,20 @@ type TextDocumentIdentifier struct {
 }
 
 type CodeLens struct {
-	Range   Range    `json:"range"`
-	Command *Command `json:"command"`
+	Range   Range            `json:"range"`
+	Command *Command         `json:"command"`
+	Data    *json.RawMessage `json:"data,omitempty"`
+}
+
+// A data entry field that is preserved on a code lens item
+// between a code lens and a code lens resolve request.
+//
+// This is specific for golens, when the server receives `codeLens/resolve`,
+// it reads this field to look up in the cache to fills in `command.title` and `command.arguments`.
+type CodeLensData struct {
+	URI  string `json:"uri"`
+	Key  string `json:"key"`
+	Kind string `json:"kind"`
 }
 
 type Range struct {
@@ -52,6 +65,20 @@ func URIToPath(uri string) string {
 
 func PathToURI(path string) string {
 	return "file://" + path
+}
+
+type Registration struct {
+	ID              string `json:"id"`
+	Method          string `json:"method"`
+	RegisterOptions any    `json:"registerOptions,omitempty"`
+}
+
+type RegistrationParams struct {
+	Registrations []Registration `json:"registrations"`
+}
+
+type DidChangeWatchedFilesRegistrationOptions struct {
+	Watchers []FileSystemWatcher `json:"watchers"`
 }
 
 type DidSaveTextDocumentParams struct {

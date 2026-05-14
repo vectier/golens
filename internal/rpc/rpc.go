@@ -16,6 +16,19 @@ type Request struct {
 	Params  *json.RawMessage `json:"params,omitempty"`
 }
 
+func NewRequest(id int, method string, params any) (*Request, error) {
+	paramsBytes, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request params: %w", err)
+	}
+	return &Request{
+		JSONRPC: Version,
+		ID:      id,
+		Method:  method,
+		Params:  new(json.RawMessage(paramsBytes)),
+	}, nil
+}
+
 // https://www.jsonrpc.org/specification#response_object
 type Response struct {
 	JSONRPC string `json:"jsonrpc"`

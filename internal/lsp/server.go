@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync/atomic"
 
 	"github.com/vectier/golens/internal/rpc"
 )
@@ -16,16 +17,23 @@ import (
 var Version = "0.0.0-dev"
 
 type Server struct {
-	handlers    HandlerRegistry
-	initialized bool
+	handlers HandlerRegistry
+	cache    ModuleCache
+	nextID   atomic.Int64
 }
 
 func NewServer() *Server {
-	srv := &Server{handlers: make(HandlerRegistry)}
+	srv := &Server{
+		handlers: make(HandlerRegistry),
+		cache:    make(ModuleCache),
+	}
 
 	RegisterHandler(srv, "initialize", srv.Initialize)
 	RegisterHandler(srv, "initialized", srv.Initialized)
 	RegisterHandler(srv, "textDocument/codeLens", srv.TextDocumentCodeLens)
+	RegisterHandler(srv, "codeLens/resolve", srv.CodeLensResolve)
+	RegisterHandler(srv, "textDocument/didSave", srv.TextDocumentDidSave)
+	RegisterHandler(srv, "workspace/didChangeWatchedFiles", srv.WorkspaceDidChangeWatchedFiles)
 	RegisterHandler(srv, "shutdown", srv.Shutdown)
 	RegisterHandler(srv, "exit", srv.Exit)
 
@@ -34,7 +42,7 @@ func NewServer() *Server {
 
 func (srv *Server) Handle(ctx context.Context, r *bufio.Reader, w io.Writer) {
 	for {
-		s, err := NewSession(r, w)
+		s, err := NewSession(srv, r, w)
 		if err != nil {
 			log.Printf("failed to create a session: %s\n", err)
 			continue
@@ -93,11 +101,12 @@ func RegisterHandler[T any, R any](
 }
 
 type Session struct {
-	rpc.Request
+	srv            *Server
 	responseWriter io.Writer
+	rpc.Request
 }
 
-func NewSession(r *bufio.Reader, w io.Writer) (*Session, error) {
+func NewSession(srv *Server, r *bufio.Reader, w io.Writer) (*Session, error) {
 	body, err := Parse(r)
 	if err != nil {
 		return nil, fmt.Errorf("malformed jsonrpc2 request: %w", err)
@@ -106,5 +115,14 @@ func NewSession(r *bufio.Reader, w io.Writer) (*Session, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal jsonrpc2 request: %w", err)
 	}
-	return &Session{Request: req, responseWriter: w}, nil
+	return &Session{srv: srv, responseWriter: w, Request: req}, nil
+}
+
+func (s *Session) Callback(method string, params any) error {
+	id := int(s.srv.nextID.Add(1))
+	req, err := rpc.NewRequest(id, method, params)
+	if err != nil {
+		return err
+	}
+	return Respond(s.responseWriter, req)
 }
