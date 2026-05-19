@@ -18,14 +18,14 @@ var Version = "0.0.0-dev"
 
 type Server struct {
 	handlers HandlerRegistry
-	cache    ModuleCache
+	cache    *ModuleCache
 	nextID   atomic.Int64
 }
 
 func NewServer() *Server {
 	srv := &Server{
 		handlers: make(HandlerRegistry),
-		cache:    make(ModuleCache),
+		cache:    NewModuleCache(),
 	}
 
 	RegisterHandler(srv, "initialize", srv.Initialize)
@@ -126,3 +126,4 @@ func (s *Session) Callback(method string, params any) error {
 	}
 	return Respond(s.responseWriter, req)
 }
+ 

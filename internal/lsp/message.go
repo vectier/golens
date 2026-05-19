@@ -34,6 +34,11 @@ type CodeLensData struct {
 	Kind string `json:"kind"`
 }
 
+func CodeLensWithData(r Range, uri string, key string, kind string) CodeLens {
+	raw, _ := json.Marshal(CodeLensData{URI: uri, Key: key, Kind: kind})
+	return CodeLens{Range: r, Data: new(json.RawMessage(raw))}
+}
+
 type Range struct {
 	Start Position `json:"start"`
 	End   Position `json:"end"`

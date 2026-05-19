@@ -41,11 +41,11 @@ func (srv *Server) Initialized(s *Session, _ any) (any, error) {
 }
 
 func (srv *Server) TextDocumentCodeLens(s *Session, p CodeLensParams) ([]CodeLens, error) {
-	return ListInterfaceLenses(p.TextDocument.URI)
+	return srv.listLenses(p.TextDocument.URI)
 }
 
 func (srv *Server) CodeLensResolve(s *Session, p CodeLens) (any, error) {
-	return nil, nil
+	return srv.resolveLens(p)
 }
 
 func (srv *Server) TextDocumentDidSave(s *Session, p DidSaveTextDocumentParams) (any, error) {
